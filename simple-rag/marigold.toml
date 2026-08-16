@@ -1,0 +1,7 @@
+# examples/simple-rag/marigold.toml -- package, overrides only what it needs to
+[deployment]
+compose_files = ["core", "webui"]
+models_yaml = ["models.yaml"]
+
+[environment]
+RAG_EMBEDDING_MODEL = "sentence-transformers/all-minilm-l6-v2"

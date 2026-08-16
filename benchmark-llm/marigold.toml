@@ -1,0 +1,4 @@
+# examples/benchmark-llm/marigold.toml
+[deployment]
+compose_files = ["core"]
+models_yaml = ["models.yaml"]

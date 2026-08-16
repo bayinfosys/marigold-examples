@@ -1,0 +1,23 @@
+models:
+
+  - name: qwen/qwen3-8b
+    provider: huggingface
+    type: instruct
+    input: chat
+    output: chat
+    extra_env:
+      LOAD_IN_4BIT: "1"
+    description: >
+      Small instruction model, for text summary.
+
+  - name: sentence-transformers/all-minilm-l6-v2
+    provider: huggingface
+    type: text-embedding
+    input: text
+    output: vector/384
+    parameters:
+      vector_size: 384
+    description: >
+      Matches RAG_EMBEDDING_MODEL already set on the open-webui service
+      in docker-compose.core.yaml -- no other config change needed for
+      open-webui to use it.

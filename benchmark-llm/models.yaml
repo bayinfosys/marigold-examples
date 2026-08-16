@@ -1,0 +1,96 @@
+# Single self-contained catalogue for this example. Nothing else is
+# assumed to be loaded alongside it.
+#
+# All names lowercase -- required, not just tidy: the submission path
+# (receiver_logic.py) always lowercases the incoming model name before
+# a case-sensitive DB lookup, so any mixed-case entry here is otherwise
+# unreachable regardless of what the client sends.
+
+_templates:
+
+  slm: &slm
+    provider: huggingface
+    type: instruct
+    input: chat
+    output: chat
+    # No extra_env -- everything under this template is <=151M params,
+    # quantising buys nothing at this size.
+
+  mainline: &mainline
+    provider: huggingface
+    type: instruct
+    input: chat
+    output: chat
+    extra_env:
+      LOAD_IN_4BIT: "1"
+
+models:
+
+  # --- Qwen3, full dense ladder up to the 14B cap ---
+
+  - { <<: *mainline, name: qwen/qwen3-0.6b }
+  - { <<: *mainline, name: qwen/qwen3-1.7b }
+  - { <<: *mainline, name: qwen/qwen3-4b }
+  - { <<: *mainline, name: qwen/qwen3-8b }
+  - { <<: *mainline, name: qwen/qwen3-14b }
+
+  # --- Gemma, both current generations, up to 12B ---
+
+  - { <<: *mainline, name: google/gemma-3-1b-it }
+  - { <<: *mainline, name: google/gemma-3-4b-it }
+  - { <<: *mainline, name: google/gemma-3-12b-it }
+  - { <<: *mainline, name: google/gemma-4-e2b-it }
+  - { <<: *mainline, name: google/gemma-4-e4b-it }
+  - { <<: *mainline, name: google/gemma-4-12b-it }
+
+  # --- Llama family, capped at 8B -- no mainline dense Llama exists
+  # between 8B and 70B, and Llama 4 moved to MoE
+
+  - { <<: *mainline, name: meta-llama/llama-3.2-1b-instruct }
+  - { <<: *mainline, name: meta-llama/llama-3.2-3b-instruct }
+  - { <<: *mainline, name: meta-llama/llama-3.1-8b-instruct }
+  - { <<: *mainline, name: cognitivecomputations/dolphin-2.9-llama3-8b }
+
+  # -- https://huggingface.co/spaces/AxiomicLabs/Open_SLM_Leaderboard --- 
+  # everything with trust remote code, gated, and large sized MoE
+
+  - { <<: *slm, name: huggingfacetb/smollm2-135m }
+  - { <<: *slm, name: supralabs/supra-50m-base }
+  - { <<: *slm, name: supralabs/supra-50m-instruct }
+  - { <<: *slm, name: supralabs/supra-50m-reasoning }
+  - { <<: *slm, name: huggingfacetb/smollm-135m }
+  - { <<: *slm, name: facebook/opt-125m }
+  - { <<: *slm, name: openai-community/gpt2 }
+  - { <<: *slm, name: lh-tech-ai/spark-5m-base-v4 }
+  - { <<: *slm, name: supralabs/supra-mini-v5-8m }
+  - { <<: *slm, name: eleutherai/pythia-70m }
+  - { <<: *slm, name: supralabs/supra-mini-v4-2m }
+  - { <<: *slm, name: eleutherai/pythia-31m }
+  - { <<: *slm, name: stentorlabs/portimbria-150m }
+  - { <<: *slm, name: huggingfacetb/nanowhale-100m-base }
+  - { <<: *slm, name: eleutherai/pythia-14m }
+  - { <<: *slm, name: harley-ml/tenete-8m }
+  - { <<: *slm, name: harley-ml/dillion-1.2m }
+  - { <<: *slm, name: mihaipopa-1/cinnabarlm-1.4m-base }
+  - { <<: *slm, name: mihaipopa-1/cinnabarlm-4m-base }
+  - { <<: *slm, name: mihaipopa-1/cinnabarlm-1.5m-base }
+  - { <<: *slm, name: harley-ml/dillionv2-1.3m }
+  - { <<: *slm, name: supralabs/supra-mini-v6-1m }
+  - { <<: *slm, name: godelev/archaea-74m }
+  - { <<: *slm, name: thingai/quark-50m }
+  - { <<: *slm, name: thingai/quark-135m }
+  - { <<: *slm, name: veyra-ai/veyra-30m-base-5b-tokens }
+  - { <<: *slm, name: fromziro/syn-2.6m }
+  - { <<: *slm, name: godelev/ant-10m }
+  - { <<: *slm, name: finnianx/michel-tiny }
+  - { <<: *slm, name: finnianx/michel-micro }
+  - { <<: *slm, name: rtc2022/kirk-tung }
+  - { <<: *slm, name: jhu-clsp/ettin-decoder-32m }
+  - { <<: *slm, name: jhu-clsp/ettin-decoder-17m }
+  - { <<: *slm, name: jhu-clsp/ettin-decoder-68m }
+  - { <<: *slm, name: jhu-clsp/ettin-decoder-150m }
+  - { <<: *slm, name: fromziro/er-tiny-1.3m }
+  - { <<: *slm, name: finnianx/michel-nano }
+  - { <<: *slm, name: smalldoge/doge-20m }
+  - { <<: *slm, name: finnianx/michel-nano-v2 }
+  - { <<: *slm, name: 56m/dumb-1.2-exp-0616 }

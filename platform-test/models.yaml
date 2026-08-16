@@ -1,0 +1,16 @@
+# Deliberately tiny -- this catalogue exists only to make the platform
+# test fast, not to be representative of anything served in production.
+# See examples/benchmark-llm/models.yaml for the full ladder.
+
+_templates:
+
+  model: &model
+    provider: huggingface
+
+models:
+
+  - { <<: *model, name: qwen/qwen3-0.6b, type: instruct }
+  - { <<: *model, name: huggingfacetb/smollm2-135m, type: instruct }
+  - { <<: *model, name: sentence-transformers/all-minilm-l6-v2, type: text-embedding }
+  - { <<: *model, name: openai/clip-vit-base-patch32, type: image-embedding }
+  - { <<: *model, name: huggingfacetb/smolvlm-256m-instruct, type: img2txt }
