@@ -64,3 +64,5 @@ through long), `structured` (JSON-schema-constrained output),
 `long_form` (long generations, for sustained power/VRAM sampling).
 Edit the topic and template lists in `build_prompts.py` to grow the
 set -- prompts are generated combinatorially, not hand-written.
+
+[Full walkthrough](https://marigold.run/examples/benchmark-llm.html)

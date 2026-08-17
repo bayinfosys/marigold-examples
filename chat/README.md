@@ -2,7 +2,7 @@
 
 Private chat via Open WebUI, backed by a self-hosted instruct model.
 
-## Run
+## Start
 
 ```bash
 marigold deployment start marigold-examples/chat
@@ -21,3 +21,5 @@ Chat with the model using [Open WebUI](https://docs.openwebui.com/)
 ```bash
 marigold deployment stop marigold-examples/chat
 ```
+
+[Full walkthrough](https://marigold.run/examples/chat.html)

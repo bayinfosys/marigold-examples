@@ -11,14 +11,15 @@ documents, rather than the model answering from its own knowledge.
 
 - `sentence-transformers/all-minilm-l6-v2` -- text-embedding, matches
   open-webui's `RAG_EMBEDDING_MODEL` with no further configuration.
-- `qwen/qwen3-8b` -- small instruct model.
-
+- `qwen/qwen3-8b` -- instruct model.
 
 ## Running
 
 ```bash
-docker compose --env-file examples/simple-rag/local.env up
+marigold deployment start marigold-examples/simple-rag
 ```
+
+Open `http://localhost:3000`.
 
 ## Test documents
 
@@ -60,12 +61,12 @@ between candidates, not just retrieval from a single uploaded file.
 
 ## Questions and expected results
 
-| Question | Expected | Verified |
-|---|---|---|
-| What is Bramblecroft Systems' ticket system called, and how many employees does it have? | Nettleburn, 342 | Yes -- correct, sourced to `doc1-bramblecroft.txt` only |
-| Who founded Corvidwatch, and what's their sensor platform called? | Tomasz Ferrenbeck, Rookwire | Yes -- correct, sourced to `doc2-corvidwatch.txt` only |
-| What was Quillmere Analytics' revenue, and what's their forecasting model called? | 2.7 million euros, Driftlantern | Yes -- correct, sourced to `doc3-quillmere.txt` only |
-| What is Bramblecroft Systems' primary competitor? | Not stated in any document -- correct answer is "I don't know" | **Not yet run.** This is the negative control: it checks whether the model fabricates an answer when nothing retrieved actually supports one, rather than checking retrieval itself. Run this before treating the mechanic as fully verified. |
+| Question | Expected |
+|---|---|
+| What is Bramblecroft Systems' ticket system called, and how many employees does it have? | Nettleburn, 342 -- sourced to `doc1-bramblecroft.txt` only |
+| Who founded Corvidwatch, and what's their sensor platform called? | Tomasz Ferrenbeck, Rookwire -- sourced to `doc2-corvidwatch.txt` only |
+| What was Quillmere Analytics' revenue, and what's their forecasting model called? | 2.7 million euros, Driftlantern -- sourced to `doc3-quillmere.txt` only |
+| What is Bramblecroft Systems' primary competitor? | Not stated in any document -- correct answer is "I don't know." This is the negative control: it checks whether the model fabricates an answer when nothing retrieved supports one, rather than checking retrieval itself. |
 
 ## What this confirms, and what it doesn't
 
@@ -74,15 +75,15 @@ pipeline are wired correctly, and retrieval discriminates between
 multiple candidate documents rather than defaulting to whichever was
 uploaded most recently.
 
-Doesn't confirm: chunking quality, retrieval behaviour at realistic
-document lengths or counts, or whether the model stays honest when
-nothing relevant is retrieved (see the unrun question above). Treat
-this as a plumbing check, not a quality benchmark -- see
-`TODO_evals.md` for the eval tooling intended for the latter.
+Doesn't confirm: chunking quality or retrieval behaviour at realistic
+document lengths or counts. Treat this as a plumbing check, not a
+quality benchmark.
 
 ## Architecture note
 
 Marigold has no vector store of its own. Retrieval, chunking, and
-vector storage here are all open-webui's own ChromaDB instance
-(`data/webui/vector_db/chroma.sqlite3`), created automatically. Marigold
+vector storage here are all open-webui's own ChromaDB instance,
+created automatically under the shared model cache directory. Marigold
 supplies embedding vectors on request and nothing else in this path.
+
+[Full walkthrough](https://marigold.run/examples/simple-rag.html)

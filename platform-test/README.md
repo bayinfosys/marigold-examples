@@ -1,12 +1,12 @@
-# quick-platform-test
+# platform-test
 
 Smallest example. Exercises the core API endpoints against small
 models -- a fast first run to confirm everything's working.
 
-## Run
+## Start
 
 ```bash
-marigold deployment start marigold-examples/quick-platform-test
+marigold deployment start marigold-examples/platform-test
 ```
 
 ## Models
@@ -29,5 +29,7 @@ Exercises `/models`, `/embed/text`, `/embed/image`, `/gen/instruct`,
 ## Stop
 
 ```bash
-marigold deployment stop marigold-examples/quick-platform-test
+marigold deployment stop marigold-examples/platform-test
 ```
+
+[Full walkthrough](https://marigold.run/examples/platform-test.html)
