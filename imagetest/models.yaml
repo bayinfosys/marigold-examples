@@ -1,0 +1,10 @@
+models:
+  - name: black-forest-labs/FLUX.1-schnell
+    provider: huggingface
+    type: txt2img
+    input: text
+    output: image
+    extra_env:
+      NUM_STEPS: "4"
+    description: >
+      ungated flux schnell; timestep-distilled, 4-step schedule.
