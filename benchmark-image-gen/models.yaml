@@ -1,0 +1,54 @@
+# Single self-contained catalogue for this example. Nothing else is
+# assumed to be loaded alongside it.
+#
+# All names lowercase -- required, not just tidy: the submission path
+# (receiver_logic.py) always lowercases the incoming model name before
+# a case-sensitive DB lookup, so any mixed-case entry here is otherwise
+# unreachable regardless of what the client sends.
+#
+# Sizes are measured on-disk figures from a populated cache, not repo
+# metadata. The full set is roughly 96 GB.
+
+_templates:
+
+  unet: &unet
+    provider: huggingface
+    type: txt2img
+    input: text
+    output: image
+
+  dit: &dit
+    provider: huggingface
+    type: txt2img
+    input: text
+    output: image
+
+models:
+
+  # --- unet architectures ---
+
+  - <<: *unet
+    name: stabilityai/stable-diffusion-xl-base-1.0
+    description: >
+      14 GB. 25-step default. The reference point every other entry is
+      measured against.
+
+  # --- DiT architectures ---
+
+  - <<: *dit
+    name: black-forest-labs/flux.1-schnell
+    description: >
+      34 GB with the T5 encoder. Timestep-distilled: 4 steps,
+      guidance_scale 0. A step sweep on this model measures cost, not
+      quality.
+
+  - <<: *unet
+    name: efficient-large-model/sana_1600m_1024px_diffusers
+    description: >
+      16 GB. 1.6B linear-attention DiT. Exercises a pipeline class
+      outside the SD and FLUX families.
+
+  - <<: *dit
+    name: tongyi-mai/z-image-turbo
+    description: >
+      33 GB. Turbo schedule, few steps.
