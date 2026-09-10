@@ -1,0 +1,35 @@
+# Single self-contained catalogue for this example.
+#
+# All names lowercase -- required, not just tidy: the submission path
+# lowercases before a case-sensitive DB lookup.
+#
+# Measured on-disk sizes. The full set is roughly 71 GB, dominated by
+# text encoders rather than the transformers: Wan2.1-T2V-1.3B is 1.3B
+# parameters and 29 GB on disk, because the repository carries UMT5-XXL
+# and several weight formats.
+
+_templates:
+
+  video: &video
+    provider: huggingface
+    type: txt2vid
+    input: text
+    output: video
+
+models:
+
+  - <<: *video
+    name: wan-ai/wan2.1-t2v-1.3b-diffusers
+    description: >
+      29 GB. The smallest credible text-to-video. First exercise of the
+      txt2vid loader and the mp4 encode path.
+
+  - <<: *video
+    name: thudm/cogvideox-2b
+    description: >
+      14 GB. Different pipeline class, same loader.
+
+  - <<: *video
+    name: lightricks/ltx-video
+    description: >
+      28 GB. Third pipeline class through the same code path.
