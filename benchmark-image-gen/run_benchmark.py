@@ -1,16 +1,22 @@
 """
-run_benchmark.py -- one pass, re-run whenever you like.
+run_benchmark.py -- submit every parameter set to every model, record what
+comes back.
 
-message_id is a deterministic hash of the request body, and every field
-in that body (model, prompt, steps, resolution, seed) is fixed by the
-prompt set. So resubmitting already-completed work is always a cheap
-cache-status check, never a re-run, with no nonce needed to make the
-bodies distinct.
+The runner imposes no structure. It reads the model list from /models,
+reads parameter sets from prompts.jsonl, and for each model sends every
+set in turn, polls to completion, and flattens the whole response into a
+CSV row. Grouping, repeats and sweeps live in the prompt file; analysis
+groups on the label.
 
-Binary output retrieval returns 501, so this records the output
-reference -- path and mimetype -- rather than fetching bytes. The files
-are under MARIGOLD_CACHE_DIR/data/outputs/txt2img on the host running
-the worker.
+Serial by design: the worker holds one model and processes one message,
+so concurrent submission would add queue wait to the durations being
+measured. Models are processed one at a time for the same reason -- the
+worker switches models on queue depth and interleaving would cost a full
+reload between requests.
+
+Results are written to JSONL as they arrive and converted to CSV at the
+end. The CSV column set is the union of keys across all rows, which is
+only known once the run finishes.
 """
 
 from __future__ import annotations
@@ -19,9 +25,7 @@ import argparse
 import csv
 import json
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Optional
 
 import requests
 
@@ -29,285 +33,207 @@ MODEL_TYPE = "txt2img"
 SUBMIT_PATH = "/gen/txt2img"
 STATUS_PATH = "/output/gen/txt2img"
 
-FIELDNAMES = [
-    "model", "prompt_id", "prompt_group", "success",
-    "prompt", "num_inference_steps", "width", "height", "seed",
-    "output_path", "output_mimetype",
-    "http_status", "error", "raw_response",
-    "server_duration_seconds", "server_inference_seconds", "server_load_seconds",
-    "vram_usage_bytes", "vram_usage_bytes_peak",
-    "model_size_bytes", "process_memory_kb",
-    "power_watts_peak", "power_watts_mean", "cpu_offload_bytes",
-]
+PENDING = {"queued", "processing"}
 
 
-def load_prompts(path: Path) -> list[dict]:
-    prompts = []
-    with path.open() as f:
-        for line in f:
-            line = line.strip()
-            if line:
-                prompts.append(json.loads(line))
-    return prompts
+# ---------------------------------------------------------------------------
+# submission core -- the part worth lifting into the CLI
+# ---------------------------------------------------------------------------
 
+def list_models(session, base_url: str, model_type: str) -> list[str]:
+    """Active model names of one type, from Marigold's own catalogue route.
 
-def load_config(args) -> dict:
-    cfg = json.loads(args.config.read_text()) if args.config else {}
-    if args.base_url: cfg["base_url"] = args.base_url
-    if args.api_key: cfg["api_key"] = args.api_key
-    if args.user_id: cfg["user_id"] = args.user_id
-    missing = [k for k in ("base_url", "user_id") if k not in cfg]
-    if missing:
-        raise SystemExit(f"missing required config values: {missing}")
-    cfg.setdefault("api_key", None)
-    return cfg
-
-
-def list_models(base_url: str, headers: dict, model_type: str) -> list[str]:
-    """Model names from Marigold's own /models endpoint, filtered by type.
-
-    /v1/models is the OpenAI-compatible surface open-webui consumes and
-    carries no type information. /models is Marigold's own view: type,
-    cached state, and everything else in the catalogue.
+    /v1/models is the OpenAI-compatible surface and carries no type
+    information; /models returns catalogue rows as a bare JSON array.
     """
-    resp = requests.get(f"{base_url}/models", headers=headers, timeout=30)
+    resp = session.get(f"{base_url}/models", timeout=30)
     resp.raise_for_status()
-    data = resp.json()
 
-    entries = [m for m in data.get("models", []) if m.get("type") == model_type]
+    entries = [m for m in resp.json() if m.get("type") == model_type]
 
-    uncached = [m["name"] for m in entries if m.get("cached") is False]
-    if uncached:
-        print(f"warning: not cached, will fail at load: {', '.join(uncached)}")
+    for m in entries:
+        if not m.get("active", True):
+            print(f"  skipping inactive model: {m['name']}")
 
-    return [m["name"].lower() for m in entries]
-
-
-def build_payload(model: str, prompt: dict) -> dict:
-    payload = {
-        "model": model,
-        "prompt": prompt["prompt"],
-        "num_inference_steps": prompt["num_inference_steps"],
-        "width": prompt["width"],
-        "height": prompt["height"],
-        "seed": prompt["seed"],
-    }
-
-    # negative_prompt is passed through to the pipeline unconditionally
-    # by Txt2ImgModel._run, and some DiT pipelines reject the kwarg.
-    # Only send it when it carries something.
-    if prompt.get("negative_prompt"):
-        payload["negative_prompt"] = prompt["negative_prompt"]
-
-    return payload
+    return [m["name"] for m in entries if m.get("active", True)]
 
 
-def _with_retries(fn, attempts=3, backoff=1.0):
-    last_exc = None
-    for i in range(attempts):
-        try:
-            return fn()
-        except requests.exceptions.ConnectionError as exc:
-            last_exc = exc
-            if i < attempts - 1:
-                time.sleep(backoff * (i + 1))
-    raise last_exc
+def submit(session, base_url: str, body: dict) -> tuple[str, str]:
+    """POST a request. Returns (message_id, poll_url).
+
+    The Location header carries the poll URL when the API sets it; the
+    fallback constructs it from the known route shape.
+    """
+    resp = session.post(f"{base_url}{SUBMIT_PATH}", json=body, timeout=30)
+    resp.raise_for_status()
+
+    message_id = resp.json()["message_id"]
+    location = resp.headers.get("Location")
+
+    poll_url = f"{base_url}{location}" if location else \
+        f"{base_url}{STATUS_PATH}/{message_id}"
+
+    return message_id, poll_url
 
 
-def _extract(row: dict, data: dict) -> dict:
-    """Pull usage metrics and the output reference out of a completed job."""
-    result = data["result"]
-    usage = result["usage"]
+def poll(session, poll_url: str, interval: float, timeout: float) -> dict:
+    """Poll until terminal, or until timeout. Returns the envelope.
 
-    outputs = result.get("outputs") or {}
-    reference = next(iter(outputs.values()), {}) if outputs else {}
+    The HTTP status describes the poll: 202 while pending, 200 once
+    terminal, 404 for an unknown id. A job that failed is a successful
+    poll returning status="error".
+    """
+    deadline = time.time() + timeout
 
-    row.update(
-        success=True, error="", raw_response="",
-        output_path=reference.get("path", ""),
-        output_mimetype=reference.get("mimetype", ""),
-        server_duration_seconds=usage["duration"] / 1000.0,
-        server_inference_seconds=usage["inference"] / 1000.0,
-        server_load_seconds=usage["load_time_ms"] / 1000.0,
-        vram_usage_bytes=usage["vram_usage_bytes"],
-        vram_usage_bytes_peak=usage["vram_usage_bytes_peak"],
-        model_size_bytes=usage["model_size_bytes"],
-        process_memory_kb=usage["memory_usage"],
-        power_watts_peak=usage["power_watts_peak"],
-        power_watts_mean=usage["power_watts_mean"],
-        cpu_offload_bytes=usage["cpu_offload_bytes"],
-    )
+    while True:
+        resp = session.get(poll_url, timeout=30)
+
+        if resp.status_code == 202:
+            envelope = {"status": "queued"}
+        else:
+            resp.raise_for_status()
+            envelope = resp.json()
+
+        if envelope.get("status") not in PENDING:
+            return envelope
+
+        if time.time() >= deadline:
+            return {"status": "timeout", "result": {
+                "error": f"no terminal status within {timeout}s"}}
+
+        time.sleep(interval)
+
+
+# ---------------------------------------------------------------------------
+# flattening
+# ---------------------------------------------------------------------------
+
+def flatten(obj, prefix: str = "") -> dict:
+    """Flatten nested dicts and lists into dotted keys.
+
+    Whatever the server reports ends up as a column. New metrics appear
+    in the output without the runner knowing about them.
+    """
+    flat = {}
+
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            flat.update(flatten(value, f"{prefix}{key}."))
+    elif isinstance(obj, list):
+        for index, value in enumerate(obj):
+            flat.update(flatten(value, f"{prefix}{index}."))
+    else:
+        flat[prefix.rstrip(".")] = obj
+
+    return flat
+
+
+# ---------------------------------------------------------------------------
+# run
+# ---------------------------------------------------------------------------
+
+def run_one(session, base_url, model, cell, interval, timeout) -> dict:
+    body = dict(cell["request"], model=model)
+
+    row = {"label": cell["label"], "model": model}
+    row.update(flatten(body, "request."))
+
+    started = time.time()
+
+    try:
+        message_id, poll_url = submit(session, base_url, body)
+    except Exception as exc:
+        row["error"] = f"{type(exc).__name__} on submit: {exc}"
+        return row
+
+    row["message_id"] = message_id
+
+    try:
+        envelope = poll(session, poll_url, interval, timeout)
+    except Exception as exc:
+        row["error"] = f"{type(exc).__name__} on poll: {exc}"
+        return row
+
+    row["client_seconds"] = round(time.time() - started, 3)
+    row.update(flatten(envelope))
+
     return row
 
 
-def run_one(session, base_url, headers, model, prompt, wait_seconds, poll_interval) -> dict:
-    row = {
-        "model": model,
-        "prompt_id": prompt["prompt_id"],
-        "prompt_group": prompt["prompt_group"],
-        "prompt": prompt["prompt"],
-        "num_inference_steps": prompt["num_inference_steps"],
-        "width": prompt["width"],
-        "height": prompt["height"],
-        "seed": prompt["seed"],
-    }
+def write_csv(rows: list[dict], path: Path) -> None:
+    """Union of keys across all rows, label and model first."""
+    keys = sorted({k for row in rows for k in row})
+    lead = [k for k in ("label", "model", "status") if k in keys]
+    fieldnames = lead + [k for k in keys if k not in lead]
 
-    payload = build_payload(model, prompt)
-
-    try:
-        submit_resp = _with_retries(
-            lambda: session.post(f"{base_url}{SUBMIT_PATH}", headers=headers, json=payload, timeout=30)
-        )
-    except Exception as exc:
-        row.update(success=False, http_status=None,
-                   error=f"{type(exc).__name__} on submit: {exc}", raw_response="")
-        return row
-
-    if not submit_resp.ok:
-        row.update(success=False, http_status=submit_resp.status_code,
-                   error=f"submit HTTP {submit_resp.status_code}",
-                   raw_response=submit_resp.text[:2000])
-        return row
-
-    message_id = submit_resp.json()["message_id"]
-    deadline = time.time() + wait_seconds
-
-    while True:
-        try:
-            poll_resp = _with_retries(
-                lambda: session.get(f"{base_url}{STATUS_PATH}/{message_id}", headers=headers, timeout=30)
-            )
-        except Exception as exc:
-            row.update(success=False, http_status=None,
-                       error=f"{type(exc).__name__} checking status: {exc}", raw_response="")
-            return row
-
-        row["http_status"] = poll_resp.status_code
-
-        if not poll_resp.ok and poll_resp.status_code != 202:
-            row.update(success=False,
-                       error=f"status check HTTP {poll_resp.status_code}",
-                       raw_response=poll_resp.text[:2000])
-            return row
-
-        data = poll_resp.json() if poll_resp.status_code != 202 else {}
-        status = data.get("status") if data else "queued"
-
-        if status == "complete":
-            try:
-                return _extract(row, data)
-            except (KeyError, IndexError) as exc:
-                row.update(success=False,
-                           error=f"{type(exc).__name__} extracting fields: {exc}",
-                           raw_response=str(data)[:2000])
-                return row
-
-        if status in ("failed", "error"):
-            row.update(success=False, error=f"job status={status}",
-                       raw_response=str(data)[:2000])
-            return row
-
-        if time.time() >= deadline:
-            row.update(success=False, error="still queued -- rerun later", raw_response="")
-            return row
-
-        time.sleep(poll_interval)
-
-
-def sample_prompts(prompts: list[dict], max_prompts: int | None) -> list[dict]:
-    """Stratified sample across prompt_group, not the first N as they
-    appear in the file -- build_prompt_set() orders baseline first, so a
-    plain slice would never touch the sweeps at all, defeating the point
-    of a smoke test."""
-    if max_prompts is None:
-        return prompts
-
-    by_group: dict[str, list[dict]] = {}
-    for p in prompts:
-        by_group.setdefault(p["prompt_group"], []).append(p)
-
-    groups = list(by_group.values())
-    sampled: list[dict] = []
-    i = 0
-    while len(sampled) < max_prompts and any(i < len(g) for g in groups):
-        for g in groups:
-            if i < len(g) and len(sampled) < max_prompts:
-                sampled.append(g[i])
-        i += 1
-    return sampled
+    with path.open("w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=Path, default=None)
-    parser.add_argument("--base-url", type=str, default=None)
-    parser.add_argument("--api-key", type=str, default=None)
-    parser.add_argument("--user-id", type=str, default=None)
-    parser.add_argument("--prompts", type=Path, default=Path(__file__).parent / "prompts.jsonl")
-    parser.add_argument("--models", type=str, nargs="+", default=None, help="explicit model names")
+    parser.add_argument("--base-url", required=True)
+    parser.add_argument("--user-id", required=True,
+                        help="any string; Marigold tags requests by it")
+    parser.add_argument("--api-key", default=None)
+    parser.add_argument("--prompts", type=Path,
+                        default=Path(__file__).parent / "prompts.jsonl")
+    parser.add_argument("--models", nargs="+", default=None,
+                        help="explicit model names, overriding the catalogue")
     parser.add_argument("--out", type=Path, required=True)
-    parser.add_argument("--workers", type=int, default=4)
-    parser.add_argument("--wait-seconds", type=int, default=900,
-                        help="how long to wait for one job before recording it as queued")
-    parser.add_argument("--poll-interval", type=float, default=5.0)
-    parser.add_argument(
-        "--max-prompts", type=int, default=None,
-        help="Stratified sample of N prompts per model, spread across prompt groups, for a smoke test.",
-    )
+    parser.add_argument("--poll-interval", type=float, default=2.0)
+    parser.add_argument("--timeout", type=float, default=1800.0)
     args = parser.parse_args()
 
-    cfg = load_config(args)
-    base_url = cfg["base_url"].rstrip("/")
-    headers = {"Content-Type": "application/json", "x-user-id": cfg["user_id"]}
-    if cfg["api_key"]:
-        headers["x-api-key"] = cfg["api_key"]
-
-    prompts = sample_prompts(load_prompts(args.prompts), args.max_prompts)
-    models = args.models or list_models(args.models_yaml, MODEL_TYPE)
-
-    if not models:
-        raise SystemExit(f"no {MODEL_TYPE} models found in {args.models_yaml}")
-
-    total = len(models) * len(prompts)
-    print(f"{len(models)} {MODEL_TYPE} models, {len(prompts)} prompts, {total} calls total")
+    base_url = args.base_url.rstrip("/")
 
     session = requests.Session()
-    session.mount(base_url, requests.adapters.HTTPAdapter(
-        pool_maxsize=args.workers, pool_connections=args.workers))
+    session.headers.update({"Content-Type": "application/json",
+                            "x-user-id": args.user_id})
+    if args.api_key:
+        session.headers["x-api-key"] = args.api_key
+
+    with args.prompts.open() as f:
+        cells = [json.loads(line) for line in f if line.strip()]
+
+    models = args.models or list_models(session, base_url, MODEL_TYPE)
+
+    if not models:
+        raise SystemExit(f"no active {MODEL_TYPE} models at {base_url}")
+
+    total = len(models) * len(cells)
+    print(f"{len(models)} models, {len(cells)} parameter sets, {total} requests")
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
+    jsonl_path = args.out.with_suffix(".jsonl")
 
-    with args.out.open("w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
-        writer.writeheader()
+    rows = []
+    done = 0
 
-        # Grouped by model rather than interleaved: the worker holds one
-        # model at a time and switches on queue depth, so interleaving
-        # buys a full reload between every request.
-        with ThreadPoolExecutor(max_workers=args.workers) as pool:
-            done, complete, queued = 0, 0, 0
+    with jsonl_path.open("w") as raw:
+        for model in models:
+            print(f"\n{model}")
 
-            for model in models:
-                futures = [
-                    pool.submit(run_one, session, base_url, headers, model,
-                                prompt, args.wait_seconds, args.poll_interval)
-                    for prompt in prompts
-                ]
+            for cell in cells:
+                row = run_one(session, base_url, model, cell,
+                              args.poll_interval, args.timeout)
 
-                for future in as_completed(futures):
-                    row = future.result()
-                    writer.writerow(row)
-                    f.flush()
-                    done += 1
-                    if row["success"] is True:
-                        complete += 1
-                    elif row.get("error") == "still queued -- rerun later":
-                        queued += 1
-                    if done % 25 == 0:
-                        print(f"  {done}/{total} ({complete} complete, {queued} still queued)")
+                raw.write(json.dumps(row) + "\n")
+                raw.flush()
+                rows.append(row)
 
-    print(f"done. {complete} complete, {queued} still queued, "
-          f"{done - complete - queued} failed -- rerun this script later to pick up more completions.")
+                done += 1
+                status = row.get("status", row.get("error", "?"))
+                print(f"  [{done}/{total}] {cell['label']}: {status}")
+
+    write_csv(rows, args.out)
+
+    complete = sum(1 for r in rows if r.get("status") == "complete")
+    print(f"\n{complete}/{total} complete")
+    print(f"  {args.out}")
+    print(f"  {jsonl_path}")
 
 
 if __name__ == "__main__":
