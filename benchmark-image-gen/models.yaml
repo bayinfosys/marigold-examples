@@ -37,6 +37,9 @@ models:
 
   - <<: *dit
     name: black-forest-labs/flux.1-schnell
+    extra_env:
+      NUM_STEPS: "4"
+      LOAD_IN_4BIT: "1"
     description: >
       34 GB with the T5 encoder. Timestep-distilled: 4 steps,
       guidance_scale 0. A step sweep on this model measures cost, not
@@ -50,5 +53,8 @@ models:
 
   - <<: *dit
     name: tongyi-mai/z-image-turbo
+    extra_env:
+      NUM_STEPS: "4"
+      LOAD_IN_4BIT: "1"
     description: >
       33 GB. Turbo schedule, few steps.
