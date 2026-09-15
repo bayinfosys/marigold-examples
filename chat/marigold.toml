@@ -1,4 +1,4 @@
 # examples/chat/marigold.toml
 [deployment]
-compose_files = ["core", "webui"]
+compose_files = ["core", "gpu", "webui"]
 models_yaml = ["models.yaml"]
