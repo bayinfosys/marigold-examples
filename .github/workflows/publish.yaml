@@ -28,7 +28,6 @@ jobs:
           marigold registry build .
           --out dist
           --front-page README.md
-          --base-url https://marigold.run/marigold-examples/
       - name: Build catalogue
         run: >
           docker run --rm --user "$(id -u):$(id -g)"
