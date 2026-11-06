@@ -1,0 +1,251 @@
+# Image generation benchmark catalogue.
+#
+# All names lowercase -- required, not just tidy: the submission path
+# (receiver_logic.py) always lowercases the incoming model name before a
+# case-sensitive DB lookup, so any mixed-case entry here is otherwise
+# unreachable regardless of what the client sends.
+#
+# Grouped by architecture, which is the axis the measurements are about.
+# No hardware annotations: the deployment chooses the instance, and a
+# model that does not fit produces a load failure, which is itself a
+# result worth recording.
+#
+# Sizes and step figures are measured on an A10G unless marked
+# estimated. Names and availability need checking before each run --
+# FLUX became gated between two runs in the same week:
+#
+#   marigold cache populate . 2>&1 | grep -E "ERROR|loading"
+
+_templates:
+
+  txt2img: &txt2img
+    provider: huggingface
+    type: txt2img
+    input: text
+    output: image
+
+models:
+
+  # -----------------------------------------------------------------
+  # unet, Stable Diffusion family
+  #
+  # One architecture across four parameter counts, so the per-step cost
+  # against model size comes out of this group directly.
+  # -----------------------------------------------------------------
+
+  - <<: *txt2img
+    name: segmind/tiny-sd
+    description: >
+      ~2 GB estimated. Distilled SD 1.5. The floor of the range: if a
+      measurement cannot separate this from SDXL, the measurement is
+      not working.
+
+  - <<: *txt2img
+    name: segmind/small-sd
+    description: >
+      ~2.5 GB estimated. One step up from tiny-sd, same distillation
+      family.
+
+  - <<: *txt2img
+    name: stable-diffusion-v1-5/stable-diffusion-v1-5
+    description: >
+      ~4 GB estimated. The original 512px unet, and the architecture
+      most third-party checkpoints derive from.
+
+  - <<: *txt2img
+    name: stabilityai/stable-diffusion-2-1
+    description: >
+      ~5 GB estimated. 768px, OpenCLIP text encoder rather than CLIP.
+
+  - <<: *txt2img
+    name: segmind/segmind-vega
+    description: >
+      ~3.5 GB estimated. Heavily distilled SDXL.
+
+  - <<: *txt2img
+    name: segmind/ssd-1b
+    description: >
+      ~7 GB estimated. 50% distilled SDXL. Third point on the SDXL
+      scaling line with segmind-vega and sdxl-base.
+
+  - <<: *txt2img
+    name: stabilityai/stable-diffusion-xl-base-1.0
+    description: >
+      14 GB. 6.95 GB VRAM allocated, 11.14 GB peak, 0.289 s/step on an
+      A10G, 0.675 s/step on an RTX 3060. The reference point.
+
+  - <<: *txt2img
+    name: playgroundai/playground-v2.5-1024px-aesthetic
+    description: >
+      ~14 GB estimated. SDXL architecture, retrained from scratch. Any
+      difference against sdxl-base is training rather than structure.
+
+  - <<: *txt2img
+    name: kwai-kolors/kolors-diffusers
+    extra_env:
+      TRUST_REMOTE_CODE: "1"
+    description: >
+      ~20 GB estimated. SDXL-family unet with a ChatGLM text encoder,
+      so it needs remote code. The compose worker sets REMOTE_CODE=0,
+      making this the test of whether extra_env overrides it.
+
+  # -----------------------------------------------------------------
+  # distilled, few-step
+  #
+  # The step sweep on these measures cost against a flat quality curve,
+  # which is the point.
+  # -----------------------------------------------------------------
+
+  - <<: *txt2img
+    name: stabilityai/sd-turbo
+    extra_env:
+      NUM_STEPS: "1"
+    description: >
+      ~2.5 GB estimated. Adversarially distilled SD 2.1, single-step.
+      Non-commercial licence -- note it if the results are published.
+
+  - <<: *txt2img
+    name: stabilityai/sdxl-turbo
+    extra_env:
+      NUM_STEPS: "1"
+    description: >
+      ~7 GB estimated. Adversarially distilled SDXL. Non-commercial
+      licence.
+
+  - <<: *txt2img
+    name: idkiro/sdxs-512-dreamshaper
+    extra_env:
+      NUM_STEPS: "1"
+    description: >
+      ~2.5 GB estimated. One-step SD 1.5 derivative.
+
+  # -----------------------------------------------------------------
+  # DiT
+  # -----------------------------------------------------------------
+
+  - <<: *txt2img
+    name: efficient-large-model/sana_600m_1024px_diffusers
+    description: >
+      ~3 GB estimated. Linear-attention DiT. Pairs with sana_1600m:
+      same architecture, 2.7x the parameters, so the two give the
+      per-step slope against model size on one architecture. The
+      cleanest scaling measurement in the set.
+
+  - <<: *txt2img
+    name: efficient-large-model/sana_1600m_1024px_diffusers
+    description: >
+      16 GB. 9.07 GB allocated, 0.157 s/step on an A10G, 0.356 on a
+      3060 -- the fastest model in the A10G run.
+
+  - <<: *txt2img
+    name: pixart-alpha/pixart-xl-2-1024-ms
+    description: >
+      ~10 GB estimated. DiT with a T5 text encoder.
+
+  - <<: *txt2img
+    name: pixart-alpha/pixart-sigma-xl-2-1024-ms
+    description: >
+      ~10 GB estimated. Successor to PixArt-alpha. Same-family pair, so
+      the difference is architecture revision rather than scale.
+
+  - <<: *txt2img
+    name: tencent-hunyuan/hunyuandit-v1.2-diffusers
+    description: >
+      ~15 GB estimated. Bilingual DiT, two text encoders.
+
+  - <<: *txt2img
+    name: alpha-vllm/lumina-next-sft-diffusers
+    description: >
+      ~10 GB estimated. Next-DiT with a Gemma text encoder.
+
+  - <<: *txt2img
+    name: black-forest-labs/flux.1-schnell
+    extra_env:
+      NUM_STEPS: "4"
+      LOAD_IN_4BIT: "1"
+    description: >
+      34 GB. Fails fp16 on an A10G by ~100 MB: 21.80 GiB allocated
+      against 22.06 usable. At NF4: 5.95 GB weights, 13.44 GB
+      allocated, 1.675 s/step. Guidance-distilled, so the guidance
+      sweep is flat -- measured, not assumed.
+
+      Gated since 2026-09: needs HF_TOKEN and licence acceptance.
+
+  - <<: *txt2img
+    name: tongyi-mai/z-image-turbo
+    extra_env:
+      NUM_STEPS: "4"
+    description: >
+      33 GB. 20.53 GB allocated, 23.09 GB peak on a 22.06 GB card, with
+      allocator warnings throughout and 2.534 s/step -- the slowest in
+      the set.
+
+      Produced 3 KB PNGs on the A10G run: pipeline ran, output blank.
+      LOAD_IN_4BIT removed here as the first hypothesis.
+
+  - <<: *txt2img
+    name: qwen/qwen-image
+    description: >
+      ~40 GB estimated. The largest here.
+
+  # -----------------------------------------------------------------
+  # multi-stage and non-diffusion
+  #
+  # Combined pipelines with several stages, and one model that is not
+  # diffusion at all. These exercise loader paths nothing else here
+  # touches, so a failure is as informative as a measurement.
+  # -----------------------------------------------------------------
+
+  - <<: *txt2img
+    name: warp-ai/wuerstchen
+    description: >
+      ~5 GB estimated. Three-stage cascade in a 42x compressed latent
+      space against SD's 8x. Combined pipeline: load_diffusion_pipeline
+      calls .to(target) once, which may not place every stage.
+
+  - <<: *txt2img
+    name: kandinsky-community/kandinsky-2-2-decoder
+    description: >
+      ~5 GB estimated decoder. Two-stage prior plus decoder, combined
+      pipeline.
+
+  - <<: *txt2img
+    name: stabilityai/stable-cascade
+    description: >
+      ~20 GB estimated. Wuerstchen v3, three stages. The largest
+      combined pipeline here.
+
+  - <<: *txt2img
+    name: huggingface/amused-512
+    description: >
+      ~1.5 GB estimated. MaskGIT over VQ tokens: parallel decoding, no
+      denoising loop. num_inference_steps may mean something different
+      or nothing. The most architecturally distant entry, and the one
+      most likely to break the loader, which is why it is here.
+
+  # -----------------------------------------------------------------
+  # texture and pattern
+  #
+  # Fine-tunes aimed at game and material work. Tileability in these is
+  # a property of the inference recipe rather than the weights, and the
+  # txt2img handler implements none of it -- see the note below.
+  # -----------------------------------------------------------------
+
+  - <<: *txt2img
+    name: dream-textures/texture-diffusion
+    description: >
+      ~4 GB estimated. SD 1.5 DreamBooth fine-tune for flat diffuse
+      textures, minimal baked lighting. Prompts need the token "pbr" to
+      invoke the style, so the benchmark prompt set produces
+      off-distribution output for this entry. Loads as a standard
+      StableDiffusionPipeline.
+
+  - <<: *txt2img
+    name: arrexel/pattern-diffusion
+    description: >
+      ~5 GB estimated. SD 2.0 fine-tune for seamless tileable patterns.
+      The model card's recipe is DDPM scheduler, roll the latents for
+      the first ~80% of steps, circular padding on unet and VAE for the
+      last ~20%. The handler does none of that, so output here is
+      pattern-styled and not tileable. Measured as a cost data point;
+      the seamless result needs handler work.

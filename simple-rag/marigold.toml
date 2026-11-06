@@ -1,6 +1,7 @@
 # examples/simple-rag/marigold.toml -- package, overrides only what it needs to
-[deployment]
-compose_files = ["core", "webui"]
+[application]
+name = "simple-rag"
+version = "0.1.0"
 models_yaml = ["models.yaml"]
 
 [environment]

@@ -1,4 +1,9 @@
-# examples/quick-platform-test/marigold.toml
-[deployment]
-compose_files = ["core"]
+[application]
+name = "platform-test"
+version = "0.1.0"
 models_yaml = ["models.yaml"]
+compose_files = ["gpu"]        # added to the platform's list
+
+[execution]
+name = "platform-test"
+command = ["python", "run.py"]

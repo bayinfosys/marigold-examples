@@ -1,0 +1,4 @@
+[application]
+name = "benchmark-image-gen"
+version = "0.1.0"
+models_yaml = ["models.yaml"]

@@ -14,3 +14,4 @@ models:
   - { <<: *model, name: sentence-transformers/all-minilm-l6-v2, type: text-embedding }
   - { <<: *model, name: openai/clip-vit-base-patch32, type: image-embedding }
   - { <<: *model, name: huggingfacetb/smolvlm-256m-instruct, type: img2txt }
+  - { <<: *model, name: huggingfacetb/smolvlm-xxm-instruct, type: img2txt }
