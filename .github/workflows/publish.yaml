@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   registry:
-    uses: bayinfosys/marigold/.github/workflows/registry.yml
+    uses: bayinfosys/marigold/.github/workflows/registry.yml@v0.8.1
     with:
       marigold-version: "0.8.1"
       deploy: ${{ github.ref == 'refs/heads/master' }}
