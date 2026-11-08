@@ -16,7 +16,8 @@ documents, rather than the model answering from its own knowledge.
 ## Running
 
 ```bash
-marigold deployment start marigold-examples/simple-rag
+marigold cache populate simple-rag
+marigold application start simple-rag
 ```
 
 Open `http://localhost:3000`.
@@ -86,4 +87,3 @@ vector storage here are all open-webui's own ChromaDB instance,
 created automatically under the shared model cache directory. Marigold
 supplies embedding vectors on request and nothing else in this path.
 
-[Full walkthrough](https://marigold.run/examples/simple-rag.html)

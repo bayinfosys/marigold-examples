@@ -18,8 +18,8 @@ Populate the cache first. The full catalogue is roughly 96 GB and a cold
 population is measured in hours, not minutes:
 
 ```bash
-marigold cache populate marigold-examples/benchmark-img-gen
-marigold deployment start marigold-examples/benchmark-img-gen
+marigold cache populate benchmark-image-gen
+marigold application start benchmark-image-gen
 ```
 
 Then:

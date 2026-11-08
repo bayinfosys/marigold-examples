@@ -2,4 +2,5 @@
 [application]
 name = "benchmark-llm"
 version = "0.1.0"
+description = "Time, tokens, VRAM and power per response for every instruct model in a deployment."
 models_yaml = ["models.yaml"]

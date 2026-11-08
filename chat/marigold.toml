@@ -2,5 +2,6 @@
 [application]
 name = "chat"
 version = "0.1.0"
+description = "A chat interface over a local instruct model, through Open WebUI."
 models_yaml = ["models.yaml"]
 compose_files = ["webui"]

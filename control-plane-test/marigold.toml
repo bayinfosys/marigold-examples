@@ -1,9 +1,10 @@
 [application]
-name = "platform-test"
+name = "control-plane-test"
 version = "0.1.0"
+description = "Checks the platform itself: the API, the catalogue, the job queue and the database behind them."
 models_yaml = ["models.yaml"]
 compose_files = ["gpu"]        # added to the platform's list
 
 [execution]
-name = "platform-test"
+name = "control-plane-test"
 command = ["python", "run.py"]

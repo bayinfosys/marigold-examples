@@ -15,8 +15,8 @@ pip install requests pyyaml
 ## Run
 
 ```bash
-marigold cache populate marigold-examples/benchmark-vid-gen
-marigold deployment start marigold-examples/benchmark-vid-gen
+marigold cache populate benchmark-vid-gen
+marigold application start benchmark-vid-gen
 
 python run_benchmark.py --base-url http://localhost:8000 \
   --user-id benchmark --max-prompts 3 --out results/smoke.csv

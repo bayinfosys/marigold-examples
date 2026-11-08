@@ -1,25 +1,9 @@
 # chat
 
-Private chat via Open WebUI, backed by a self-hosted instruct model.
-
-## Start
-
-```bash
-marigold deployment start marigold-examples/chat
-```
-
-Open `http://localhost:3000`.
-
-Chat with the model using [Open WebUI](https://docs.openwebui.com/)
+Private chat through [Open WebUI](https://docs.openwebui.com/), backed
+by a self-hosted instruct model. Open WebUI is added to the platform as
+a service and answers at `http://localhost:3000`.
 
 ## Models
 
 - `qwen/qwen3-8b` -- instruct
-
-## Stop
-
-```bash
-marigold deployment stop marigold-examples/chat
-```
-
-[Full walkthrough](https://marigold.run/examples/chat.html)

@@ -21,7 +21,8 @@ Start the deployment with the models you want to benchmark declared in
 `models.yaml`:
 
 ```bash
-marigold deployment start marigold-examples/benchmark-llm
+marigold cache populate benchmark-llm
+marigold application start benchmark-llm
 ```
 
 Run the benchmark against it:
@@ -65,4 +66,3 @@ through long), `structured` (JSON-schema-constrained output),
 Edit the topic and template lists in `build_prompts.py` to grow the
 set -- prompts are generated combinatorially, not hand-written.
 
-[Full walkthrough](https://marigold.run/examples/benchmark-llm.html)

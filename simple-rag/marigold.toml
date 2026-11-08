@@ -2,6 +2,7 @@
 [application]
 name = "simple-rag"
 version = "0.1.0"
+description = "Question answering over your own documents, with a test that proves retrieval is happening."
 models_yaml = ["models.yaml"]
 
 [environment]

@@ -1,4 +1,5 @@
 [application]
 name = "benchmark-image-gen"
 version = "0.1.0"
+description = "Time, VRAM and power per image for every txt2img model, across prompts and settings."
 models_yaml = ["models.yaml"]
