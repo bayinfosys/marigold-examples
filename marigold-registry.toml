@@ -3,5 +3,5 @@ title = "Marigold examples"
 description = "Example applications for Marigold: platform tests, benchmarks and small applications."
 
 [registry.urls]
-source = "https://github.com/bayinfosys/marigold-examples"
+source = "https://examples.marigold.run"
 maintainer = "https://www.bayis.co.uk"
